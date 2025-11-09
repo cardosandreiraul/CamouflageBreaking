@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-## For Colleagues: Get Running in 5 Minutes
+## Get Running in 5 Minutes
 
 ### 1. Clone the repo
 ```bash

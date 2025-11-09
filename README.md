@@ -16,25 +16,6 @@ This project implements and compares various edge detection algorithms specifica
 - **Laplacian of Gaussian (LoG)** - Second derivative-based detection
 - **Radial Symmetry Transform** - Symmetry-based feature detection
 
-## Project Structure
-
-```
-CamouflageBreaking/
-├── main.py                 # Main algorithm implementation
-├── requirements.txt        # Python dependencies
-├── environment.yml         # Conda environment file
-├── README.md              # This file
-├── LICENSE                # MIT License
-├── .gitignore            # Git ignore rules
-├── .python-version       # Python version (3.12.10)
-└── data/                 # Dataset directory (not tracked)
-    └── Camo Animals/
-        ├── Bear/
-        ├── Bird 1/
-        ├── Bird 2/
-        └── ... (26 animal categories)
-```
-
 ## Getting Started
 
 ### Prerequisites
@@ -157,36 +138,3 @@ The program generates:
 - **Matplotlib**: Visualization and plotting
 
 See [`requirements.txt`](requirements.txt) for exact versions.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## Troubleshooting
-
-### Common Issues
-
-**Image not found error:**
-- Verify the dataset path in `DATASET_PATH` variable
-- Ensure the dataset structure matches the expected format
-
-**Import errors:**
-- Make sure you activated the virtual environment
-- Reinstall dependencies: `pip install -r requirements.txt`
-
-**Display issues:**
-- On some systems, you may need to install additional matplotlib backends
-- Try: `pip install PyQt5` or `pip install tkinter`
-
-## Acknowledgments
-
-- Edge detection algorithms based on classical computer vision techniques
-- D_arg Convexity Detector implementation for camouflage breaking research
