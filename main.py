@@ -1,7 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Camouflage Breaking Algorithm
-Edge Detection and Convexity Analysis for Camouflaged Animals
+Camouflage Breaking Algorithm Suite
+====================================
+Full Comparison: D_arg (Convexity) vs Radial Symmetry vs Edge Detectors
+
+This suite compares various computer vision techniques for detecting camouflaged objects:
+1. D_arg (Convexity-based detection) - Novel proposed method
+2. Fast Radial Symmetry Transform - Detects symmetric features
+3. Traditional edge detectors (Canny, Sobel, Prewitt, Roberts, LoG)
+
+Author: Image Processing Research
+Purpose: Evaluate effectiveness of different algorithms on camouflaged animals
 """
 
 import os
@@ -13,435 +22,557 @@ import matplotlib.pyplot as plt
 # CONFIGURATION
 # =============================================================================
 
-DATASET_PATH = "D:\\CamouflageBreaking\\data\\Camo Animals\\"
-ROOT_DATA_PATH = DATASET_PATH
+# Root directory containing test images of camouflaged animals
+ROOT_DATA_PATH = r"C:\Users\Raul\Documents\uni\DIP\CamouflageBreaking\data\Camo Animals"
 
 # =============================================================================
-# SECTION 1: DATASET EXPLORATION
+# UTILITIES
 # =============================================================================
 
-def explore_dataset(root_path):
-    """List available categories and count images in the dataset."""
-    print("=" * 50)
-    print("DATASET EXPLORATION")
-    print("=" * 50)
-    
-    # List available animal folders
-    available_folders = [d for d in os.listdir(root_path) 
-                        if os.path.isdir(os.path.join(root_path, d))]
-    print(f"\nAvailable animal folders: {available_folders}")
-    
-    # Collect all image files
-    all_image_files = []
-    for dirpath, _, filenames in os.walk(root_path):
-        for filename in filenames:
-            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                all_image_files.append(os.path.join(dirpath, filename))
-    
-    print(f"Found {len(all_image_files)} total images in the dataset\n")
-    
-    return all_image_files
-
-# =============================================================================
-# SECTION 2: IMAGE LOADING AND PREPROCESSING
-# =============================================================================
-
-def load_and_preprocess_image(image_path):
-    """Load an image and convert it to RGB and grayscale."""
-    original_image = cv2.imread(image_path)
-    if original_image is None:
-        raise FileNotFoundError(f"Failed to load image at: {image_path}")
-    
-    # Convert BGR to RGB for display
-    original_image_rgb = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-    # Convert to grayscale for processing
-    gray_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2GRAY)
-    
-    # Print image properties
-    height, width = gray_image.shape
-    channels = original_image.shape[2] if len(original_image.shape) == 3 else 1
-    file_format = os.path.splitext(image_path)[1].upper().replace('.', '')
-    
-    print(f"Image Properties:")
-    print(f"  Path: {image_path}")
-    print(f"  Format: {file_format}")
-    print(f"  Dimensions: {height}x{width} pixels")
-    print(f"  Channels: {channels}\n")
-    
-    return original_image_rgb, gray_image
-
-# =============================================================================
-# SECTION 3: EDGE DETECTION ALGORITHMS
-# =============================================================================
-
-def run_d_arg_pipeline(gray_image, percentile=65, show_steps=False):
+def robust_normalize(img):
     """
-    D_arg Convexity Detector using Derivative of Gaussian (DoG) method.
+    Normalizes an image while ignoring extreme outliers (hotspots).
+    
+    This function prevents bright hotspots from compressing the dynamic range
+    of the rest of the image, which would result in a mostly black output.
     
     Args:
-        gray_image: Single-channel grayscale image
-        percentile: Percentile for automatic thresholding (0-100)
-        show_steps: If True, display intermediate processing steps
-    
+        img: Input image (any dtype)
+        
     Returns:
-        D_arg squared map
+        Normalized image as uint8 (0-255 range)
+        
+    Note:
+        - Clips top 0.5% of brightest pixels before normalization
+        - Fixes 'Black Image' issue without introducing noise
     """
-    # Step 1: Noise reduction with Gaussian filter
-    blurred_image = cv2.GaussianBlur(gray_image, (31, 31), 0)
+    img_float = img.astype(np.float32)
     
-    if show_steps:
-        plt.figure(figsize=(15, 5))
-        plt.subplot(1, 3, 1)
-        plt.imshow(gray_image, cmap='gray')
-        plt.title("Step 1a: Original Grayscale")
-        plt.axis('off')
-        
-        plt.subplot(1, 3, 2)
-        plt.imshow(blurred_image, cmap='gray')
-        plt.title("Step 1b: After Gaussian Blur (31x31)")
-        plt.axis('off')
-        
-        plt.subplot(1, 3, 3)
-        diff = cv2.absdiff(gray_image, blurred_image)
-        plt.imshow(diff, cmap='gray')
-        plt.title("Step 1c: Difference (Noise Removed)")
-        plt.axis('off')
-        plt.tight_layout()
-        plt.show()
+    # Find percentile values (ignore top 0.5% brightest outliers)
+    v_min, v_max = np.percentile(img_float, (0, 99.5))
     
-    def calculate_y_arg(image):
-        """Calculate the y-derivative of gradient argument."""
-        grad_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=11)
-        grad_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=11)
-        theta = np.arctan2(grad_y, grad_x)
-        return cv2.Sobel(theta, cv2.CV_64F, 0, 1, ksize=11)
+    # Clip extreme values to prevent them from squashing the rest
+    img_clipped = np.clip(img_float, v_min, v_max)
     
-    # Get original dimensions
-    h, w = blurred_image.shape
-    
-    # Initialize result map with original dimensions
-    d_arg_map = np.zeros((h, w), dtype=np.float64)
-    
-    # Rotation dictionaries
-    rotations = {
-        0: None, 
-        90: cv2.ROTATE_90_CLOCKWISE, 
-        180: cv2.ROTATE_180, 
-        270: cv2.ROTATE_90_COUNTERCLOCKWISE
-    }
-    inv_rotations = {
-        0: None, 
-        90: cv2.ROTATE_90_COUNTERCLOCKWISE, 
-        180: cv2.ROTATE_180, 
-        270: cv2.ROTATE_90_CLOCKWISE
-    }
-    
-    # Step 2: Process in all directions (isotropic operator)
-    rotation_results = {}
-    
-    for angle, rot_code in rotations.items():
-        rotated_img = cv2.rotate(blurred_image, rot_code) if rot_code else blurred_image
-        y_arg_rotated = calculate_y_arg(rotated_img)
-        y_arg_unrotated = cv2.rotate(y_arg_rotated, inv_rotations[angle]) if inv_rotations[angle] else y_arg_rotated
-        
-        # Ensure shape matches for accumulation
-        if y_arg_unrotated.shape != (h, w):
-            print(f"Warning: Shape mismatch at angle {angle}. Expected {(h, w)}, got {y_arg_unrotated.shape}")
-            y_arg_unrotated = cv2.resize(y_arg_unrotated, (w, h))
-        
-        rotation_results[angle] = y_arg_unrotated
-        d_arg_map += y_arg_unrotated
-    
-    if show_steps:
-        # Show gradient computation details for 0° rotation
-        grad_x = cv2.Sobel(blurred_image, cv2.CV_64F, 1, 0, ksize=11)
-        grad_y = cv2.Sobel(blurred_image, cv2.CV_64F, 0, 1, ksize=11)
-        theta = np.arctan2(grad_y, grad_x)
-        
-        plt.figure(figsize=(20, 10))
-        plt.subplot(2, 4, 1)
-        plt.imshow(blurred_image, cmap='gray')
-        plt.title("Step 2a: Blurred Image")
-        plt.axis('off')
-        
-        plt.subplot(2, 4, 2)
-        plt.imshow(grad_x, cmap='gray')
-        plt.title("Step 2b: Gradient X (Sobel)")
-        plt.axis('off')
-        
-        plt.subplot(2, 4, 3)
-        plt.imshow(grad_y, cmap='gray')
-        plt.title("Step 2c: Gradient Y (Sobel)")
-        plt.axis('off')
-        
-        plt.subplot(2, 4, 4)
-        plt.imshow(theta, cmap='hsv')
-        plt.title("Step 2d: Gradient Angle θ")
-        plt.axis('off')
-        
-        plt.subplot(2, 4, 5)
-        plt.imshow(rotation_results[0], cmap='gray')
-        plt.title("Step 2e: Y-derivative of θ (0°)")
-        plt.axis('off')
-        
-        plt.subplot(2, 4, 6)
-        plt.imshow(rotation_results[90], cmap='gray')
-        plt.title("Step 2f: Rotated result (90°)")
-        plt.axis('off')
-        
-        plt.subplot(2, 4, 7)
-        plt.imshow(rotation_results[180], cmap='gray')
-        plt.title("Step 2g: Rotated result (180°)")
-        plt.axis('off')
-        
-        plt.subplot(2, 4, 8)
-        plt.imshow(rotation_results[270], cmap='gray')
-        plt.title("Step 2h: Rotated result (270°)")
-        plt.axis('off')
-        
-        plt.tight_layout()
-        plt.show()
-        
-        # Show accumulation
-        plt.figure(figsize=(10, 5))
-        plt.subplot(1, 2, 1)
-        plt.imshow(d_arg_map, cmap='gray')
-        plt.title("Step 3: Sum of all rotations (D_arg map)")
-        plt.axis('off')
-        plt.colorbar()
-        
-        plt.subplot(1, 2, 2)
-        plt.hist(d_arg_map.flatten(), bins=100, color='blue', alpha=0.7)
-        plt.title("Step 3b: Distribution of D_arg values")
-        plt.xlabel("D_arg value")
-        plt.ylabel("Frequency")
-        plt.tight_layout()
-        plt.show()
-    
-    # Step 3: Accentuate high values
-    d_arg_squared = d_arg_map ** 2
-    
-    if show_steps:
-        plt.figure(figsize=(15, 5))
-        plt.subplot(1, 3, 1)
-        plt.imshow(d_arg_map, cmap='gray')
-        plt.title("Step 4a: D_arg map")
-        plt.axis('off')
-        plt.colorbar()
-        
-        plt.subplot(1, 3, 2)
-        plt.imshow(d_arg_squared, cmap='gray')
-        plt.title("Step 4b: D_arg squared (enhanced)")
-        plt.axis('off')
-        plt.colorbar()
-        
-        plt.subplot(1, 3, 3)
-        threshold_value = np.percentile(d_arg_squared, percentile)
-        thresholded = np.zeros_like(d_arg_squared, dtype=np.uint8)
-        thresholded[d_arg_squared > threshold_value] = 255
-        plt.imshow(thresholded, cmap='gray')
-        plt.title(f"Step 4c: Thresholded ({percentile}th percentile)")
-        plt.axis('off')
-        plt.tight_layout()
-        plt.show()
-        
-        print(f"D_arg statistics:")
-        print(f"  Min: {d_arg_squared.min():.2f}")
-        print(f"  Max: {d_arg_squared.max():.2f}")
-        print(f"  Mean: {d_arg_squared.mean():.2f}")
-        print(f"  Threshold ({percentile}th percentile): {threshold_value:.2f}\n")
-    
-    return d_arg_squared
-
-
-def run_canny_edge_detector(gray_image):
-    """Canny edge detection algorithm."""
-    blurred = cv2.GaussianBlur(gray_image, (5, 5), 0)
-    edges = cv2.Canny(blurred, 100, 200)
-    return edges
-
-
-def run_sobel_edge_detector(gray_image):
-    """Sobel edge detection algorithm."""
-    blurred = cv2.GaussianBlur(gray_image, (5, 5), 2)
-    grad_x = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
-    grad_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=5)
-    gradient_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
-    gradient_normalized = cv2.normalize(gradient_magnitude, None, 0, 255, 
-                                       cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    _, binary_mask = cv2.threshold(gradient_normalized, 50, 255, cv2.THRESH_BINARY)
-    return binary_mask
-
-
-def run_prewitt_detector(gray_image):
-    """Prewitt edge detection algorithm."""
-    blurred = cv2.GaussianBlur(gray_image, (5, 5), 2)
-    kernel_x = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]])
-    kernel_y = np.array([[-1, -1, -1], [0, 0, 0], [1, 1, 1]])
-    grad_x = cv2.filter2D(blurred, -1, kernel_x)
-    grad_y = cv2.filter2D(blurred, -1, kernel_y)
-    gradient_magnitude = np.sqrt(grad_x.astype(np.float64) ** 2 + grad_y.astype(np.float64) ** 2)
-    gradient_normalized = cv2.normalize(gradient_magnitude, None, 0, 255, 
-                                       cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    _, binary_mask = cv2.threshold(gradient_normalized, 50, 255, cv2.THRESH_BINARY)
-    return binary_mask
-
-
-def run_robert_cross_detector(gray_image):
-    """Roberts Cross edge detection algorithm."""
-    blurred = cv2.GaussianBlur(gray_image, (5, 5), 0)
-    kernel_x = np.array([[1, 0], [0, -1]])
-    kernel_y = np.array([[0, 1], [-1, 0]])
-    grad_x = cv2.filter2D(blurred, -1, kernel_x)
-    grad_y = cv2.filter2D(blurred, -1, kernel_y)
-    gradient_magnitude = np.sqrt(grad_x.astype(np.float64) ** 2 + grad_y.astype(np.float64) ** 2)
-    gradient_normalized = cv2.normalize(gradient_magnitude, None, 0, 255, 
-                                       cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    _, binary_mask = cv2.threshold(gradient_normalized, 50, 255, cv2.THRESH_BINARY)
-    return binary_mask
-
-
-def run_log_detector(gray_image):
-    """Laplacian of Gaussian (LoG) edge detection algorithm."""
-    blurred = cv2.GaussianBlur(gray_image, (5, 5), 1.5)
-    laplacian = cv2.Laplacian(blurred, cv2.CV_64F)
-    laplacian_abs = np.abs(laplacian)
-    laplacian_normalized = cv2.normalize(laplacian_abs, None, 0, 255, 
-                                        cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    _, binary_mask = cv2.threshold(laplacian_normalized, 50, 255, cv2.THRESH_BINARY)
-    return binary_mask
-
-
-def run_radial_symmetry_transform(gray_image, radii, alpha=2.0, beta=0.1, std_dev=1):
-    """Radial Symmetry Transform algorithm."""
-    h, w = gray_image.shape
-    blurred = cv2.GaussianBlur(gray_image, (5, 5), std_dev)
-    mag, ang = cv2.cartToPolar(cv2.Sobel(blurred, cv2.CV_32F, 1, 0),
-                               cv2.Sobel(blurred, cv2.CV_32F, 0, 1))
-    
-    S = np.zeros((h, w), np.float32)
-    mag_thresh = np.max(mag) * beta
-    
-    for y in range(h):
-        for x in range(w):
-            if mag[y, x] > mag_thresh:
-                for r in radii:
-                    p_x = int(round(x + r * np.cos(ang[y, x])))
-                    p_y = int(round(y + r * np.sin(ang[y, x])))
-                    if 0 <= p_x < w and 0 <= p_y < h:
-                        S[p_y, p_x] += 1
-    
-    S = cv2.normalize(S, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    _, binary_mask = cv2.threshold(S, 0, 255, cv2.THRESH_BINARY)
-    return binary_mask
+    # Normalize to full 0-255 range
+    return cv2.normalize(img_clipped, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
 # =============================================================================
-# SECTION 4: VISUALIZATION
+# SECTION 1: D_ARG (CONVEXITY-BASED CAMOUFLAGE DETECTION)
 # =============================================================================
 
-def compare_all_algorithms(image_path, radii=[5, 10, 15], show_d_arg_steps=True):
-    """Run all algorithms on a single image and display results."""
-    original_rgb, gray_image = load_and_preprocess_image(image_path)
+def visualize_darg_detailed(img, blurred, gx, gy, theta, rot_results, final_sum, final_sq):
+    """
+    Visualizes the step-by-step pipeline of the D_arg algorithm.
     
-    print("Running D_arg algorithm with detailed steps...")
-    d_arg_output = run_d_arg_pipeline(gray_image, percentile=75, show_steps=show_d_arg_steps)
+    Creates a comprehensive visualization showing:
+    - Preprocessing stages (original, blur, gradients)
+    - Gradient orientation (theta map)
+    - Rotational processing results (0°, 90°, 180°, 270°)
+    - Final accumulation and squaring
     
-    print("\nRunning other edge detection algorithms...")
-    canny_output = run_canny_edge_detector(gray_image)
-    sobel_output = run_sobel_edge_detector(gray_image)
-    prewitt_output = run_prewitt_detector(gray_image)
-    robert_output = run_robert_cross_detector(gray_image)
-    log_output = run_log_detector(gray_image)
-    radial_symmetry_output = run_radial_symmetry_transform(gray_image, radii)
+    Args:
+        img: Original grayscale image
+        blurred: Gaussian-blurred version
+        gx, gy: Gradient components in x and y directions
+        theta: Gradient orientation map (in radians)
+        rot_results: Dictionary of rotational processing results {angle: result}
+        final_sum: Accumulated Y_arg derivatives from all rotations
+        final_sq: Final squared result (D_arg output)
+    """
+    # Create figure with multiple subplots
+    fig = plt.figure(figsize=(18, 12))
+    fig.canvas.manager.set_window_title('D_arg Internals')
+    plt.suptitle("D_arg Operator: Step-by-Step Visualization", fontsize=16)
+
+    # Row 1: Preprocessing and gradient computation
+    plt.subplot(3, 4, 1)
+    plt.imshow(img, cmap='gray')
+    plt.title("1. Original")
+    plt.axis('off')
     
-    # Create comparison plot
-    fig, axes = plt.subplots(2, 4, figsize=(20, 10))
-    ax = axes.ravel()
+    plt.subplot(3, 4, 2)
+    plt.imshow(blurred, cmap='gray')
+    plt.title("2. Blur")
+    plt.axis('off')
     
-    ax[0].imshow(original_rgb)
-    ax[0].set_title("Original Image", fontsize=14, fontweight='bold')
-    ax[0].axis('off')
+    # Gradient magnitude = sqrt(gx² + gy²)
+    mag = np.sqrt(gx**2 + gy**2)
+    plt.subplot(3, 4, 3)
+    plt.imshow(mag, cmap='gray')
+    plt.title("3. Magnitude")
+    plt.axis('off')
     
-    ax[1].imshow(d_arg_output, cmap='gray')
-    ax[1].set_title("D_arg Convexity Detector", fontsize=14)
-    ax[1].axis('off')
+    # Theta (orientation) shown in HSV colormap for better visualization
+    plt.subplot(3, 4, 4)
+    plt.imshow(theta, cmap='hsv')
+    plt.title("4. Theta")
+    plt.axis('off')
+
+    # Row 2: Rotational processing results
+    # Shows Y_arg derivative for each rotation angle
+    rot_angles = [0, 90, 180, 270]
+    for i, angle in enumerate(rot_angles):
+        plt.subplot(3, 4, 5 + i)
+        # Normalize each rotation result for visibility
+        norm_rot = cv2.normalize(rot_results[angle], None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+        plt.imshow(norm_rot, cmap='gray')
+        plt.title(f"5.{i+1} Y_arg ({angle}°)")
+        plt.axis('off')
+
+    # Row 3: Final aggregation
+    plt.subplot(3, 4, 9)
+    plt.imshow(final_sum, cmap='gray')
+    plt.title("6. Sum")
+    plt.axis('off')
     
-    ax[2].imshow(canny_output, cmap='gray')
-    ax[2].set_title("Canny Edge Detector", fontsize=14)
-    ax[2].axis('off')
+    plt.subplot(3, 4, 10)
+    plt.imshow(final_sq, cmap='gray')
+    plt.title("7. Squared (Final)")
+    plt.axis('off')
     
-    ax[3].imshow(sobel_output, cmap='gray')
-    ax[3].set_title("Sobel Edge Detector", fontsize=14)
-    ax[3].axis('off')
-    
-    ax[4].imshow(prewitt_output, cmap='gray')
-    ax[4].set_title("Prewitt Edge Detector", fontsize=14)
-    ax[4].axis('off')
-    
-    ax[5].imshow(robert_output, cmap='gray')
-    ax[5].set_title("Roberts Cross Edge Detector", fontsize=14)
-    ax[5].axis('off')
-    
-    ax[6].imshow(log_output, cmap='gray')
-    ax[6].set_title("Laplacian of Gaussian (LoG)", fontsize=14)
-    ax[6].axis('off')
-    
-    ax[7].imshow(radial_symmetry_output, cmap='gray')
-    ax[7].set_title("Radial Symmetry Transform", fontsize=14)
-    ax[7].axis('off')
+    # Histogram shows distribution of final values (log scale for better visibility)
+    plt.subplot(3, 4, 11)
+    plt.hist(final_sq.flatten(), bins=50, color='black')
+    plt.title("Hist")
+    plt.yscale('log')
     
     plt.tight_layout()
-    plt.show()
+    plt.subplots_adjust(top=0.92)
+
+def run_d_arg_pipeline(gray_image, show_steps=True):
+    """
+    Executes the D_arg (Convexity Detection) algorithm pipeline.
     
-    print("Algorithm comparison complete!\n")
+    The D_arg operator detects convex/concave features by measuring how the
+    gradient orientation changes in the perpendicular direction (Y_arg derivative).
+    This is rotation-invariant by accumulating results from 4 rotations (0°, 90°, 180°, 270°).
+    
+    Algorithm steps:
+    1. Blur image to reduce noise
+    2. For each rotation angle (0°, 90°, 180°, 270°):
+       a. Rotate image
+       b. Compute gradients (gx, gy) and orientation (theta)
+       c. Calculate Y_arg = ∂theta/∂y (vertical derivative of orientation)
+       d. Rotate result back to original orientation
+    3. Sum all rotational results
+    4. Square the sum to enhance convexity features
+    
+    Args:
+        gray_image: Input grayscale image (uint8)
+        show_steps: If True, displays detailed visualization of pipeline
+        
+    Returns:
+        d_arg_squared: Final D_arg result (float64), high values indicate convex features
+    """
+    # Preprocessing: Gaussian blur reduces noise and stabilizes gradient computation
+    blurred = cv2.GaussianBlur(gray_image, (101, 101), 0)
+    
+    def get_gradients_and_theta(img):
+        """
+        Computes image gradients and orientation.
+        
+        Args:
+            img: Input image
+            
+        Returns:
+            gx: Gradient in x-direction
+            gy: Gradient in y-direction
+            theta: Gradient orientation (arctan2(gy, gx))
+        """
+        # Sobel operator computes derivatives in x and y directions
+        gx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
+        gy = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
+        
+        # Theta = angle of gradient vector
+        theta = np.arctan2(gy, gx)
+        return gx, gy, theta
+
+    def calculate_y_arg_derivative(theta_map):
+        """
+        Calculates the vertical derivative of the gradient orientation.
+        
+        Y_arg = ∂theta/∂y measures how gradient direction changes vertically.
+        Large values indicate convex/concave boundaries.
+        
+        Args:
+            theta_map: Gradient orientation map (in radians)
+            
+        Returns:
+            Y_arg derivative (float64)
+        """
+        # Use larger kernel (17x17) to capture broader structural features
+        return cv2.Sobel(theta_map, cv2.CV_64F, 0, 1, ksize=17)
+
+    # Initialize accumulator for summing results from all rotations
+    h, w = gray_image.shape
+    d_arg_accumulator = np.zeros((h, w), dtype=np.float64)
+    
+    # Dictionary to store intermediate results for visualization
+    rotation_snapshots = {} 
+
+    # Define rotation angles and their OpenCV rotation codes
+    # Format: (angle, forward_rotation_code, inverse_rotation_code)
+    rotations = [
+        (0,   None,                           None),                          # No rotation
+        (90,  cv2.ROTATE_90_CLOCKWISE,        cv2.ROTATE_90_COUNTERCLOCKWISE), # 90° CW
+        (180, cv2.ROTATE_180,                 cv2.ROTATE_180),                # 180°
+        (270, cv2.ROTATE_90_COUNTERCLOCKWISE, cv2.ROTATE_90_CLOCKWISE)        # 270° CW (= 90° CCW)
+    ]
+
+    # Variables to store gradient info from 0° rotation for visualization
+    g_gx, g_gy, g_theta = None, None, None
+
+    # Process each rotation angle
+    for angle, rot_code, inv_rot_code in rotations:
+        # Step 1: Rotate image (if needed)
+        if rot_code is not None:
+            curr_img = cv2.rotate(blurred, rot_code)
+        else:
+            curr_img = blurred  # 0° rotation = original
+        
+        # Step 2: Compute gradients and orientation for rotated image
+        gx, gy, theta = get_gradients_and_theta(curr_img)
+        
+        # Step 3: Calculate Y_arg derivative (vertical derivative of theta)
+        y_arg = calculate_y_arg_derivative(theta)
+
+        # Store gradient info from first rotation for visualization
+        if angle == 0:
+            g_gx, g_gy, g_theta = gx, gy, theta
+
+        # Step 4: Rotate result back to original orientation
+        if inv_rot_code is not None:
+            y_arg_unrotated = cv2.rotate(y_arg, inv_rot_code)
+        else:
+            y_arg_unrotated = y_arg
+        
+        # Ensure dimensions match (safety check after rotation)
+        if y_arg_unrotated.shape != (h, w):
+            y_arg_unrotated = cv2.resize(y_arg_unrotated, (w, h))
+        
+        # Store snapshot for visualization
+        rotation_snapshots[angle] = y_arg_unrotated
+        
+        # Step 5: Accumulate results from all rotations
+        d_arg_accumulator += y_arg_unrotated
+
+    # Step 6: Square the accumulated result to enhance features
+    # Squaring makes positive and negative responses both positive and amplifies strong features
+    d_arg_squared = d_arg_accumulator ** 2
+
+    # Visualize pipeline if requested
+    if show_steps:
+        visualize_darg_detailed(
+            gray_image, blurred, 
+            g_gx, g_gy, g_theta, 
+            rotation_snapshots, 
+            d_arg_accumulator, d_arg_squared
+        )
+
+    return d_arg_squared
 
 # =============================================================================
-# MAIN EXECUTION
+# SECTION 2: RADIAL SYMMETRY (FAST RADIAL SYMMETRY TRANSFORM)
+# =============================================================================
+
+def run_fast_radial_symmetry(gray_image, radii=[10, 20, 30, 40], alpha=2.0):
+    """
+    Implements the Fast Radial Symmetry Transform (Loy & Zelinsky, 2003).
+    
+    This algorithm detects radially symmetric features (e.g., eyes, circular patterns)
+    by analyzing how image gradients point toward or away from potential centers.
+    
+    Algorithm:
+    1. Compute image gradients (magnitude and direction)
+    2. For each radius r:
+       a. Each pixel "votes" for a symmetry center at distance r along its gradient
+       b. Positive vote: pixel + r*gradient_direction
+       c. Negative vote: pixel - r*gradient_direction
+       d. Accumulate orientation votes (O_n) and magnitude weights (M_n)
+       e. Compute symmetry: S_n = |O_n|^alpha * M_n
+       f. Smooth result with Gaussian blur
+    3. Sum symmetry maps across all radii
+    
+    Args:
+        gray_image: Input grayscale image (uint8)
+        radii: List of radii to search for symmetric features
+        alpha: Strictness parameter (higher = more selective)
+               - alpha=1: Linear response
+               - alpha=2: Standard (good balance)
+               - alpha>2: Very strict (only strong symmetry)
+               
+    Returns:
+        S_norm: Normalized symmetry map (uint8, 0-255)
+                Bright regions indicate radially symmetric features
+    """
+    # Step 1: Compute image gradients
+    # Blur first to reduce noise sensitivity
+    blurred = cv2.GaussianBlur(gray_image, (3, 3), 0)
+    
+    # Compute gradients using Sobel operator
+    g_x = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=3)
+    g_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=3)
+    
+    # Gradient magnitude = strength of edge
+    mag = np.sqrt(g_x**2 + g_y**2)
+    mag[mag == 0] = 1e-5  # Avoid division by zero
+    
+    # Normalized gradient direction (unit vectors)
+    g_x_norm = g_x / mag
+    g_y_norm = g_y / mag
+    
+    # Initialize total symmetry accumulator
+    rows, cols = gray_image.shape
+    S_total = np.zeros((rows, cols), dtype=np.float64)
+    
+    # Create coordinate grids for vectorized operations
+    y_grid, x_grid = np.indices((rows, cols))
+    
+    # Step 2: Process each radius
+    for r in radii:
+        # Initialize accumulators for this radius
+        O_n = np.zeros((rows, cols), dtype=np.float64)  # Orientation projection
+        M_n = np.zeros((rows, cols), dtype=np.float64)  # Magnitude projection
+        
+        # Calculate pixel shifts based on gradient direction and current radius
+        # Each pixel votes for a symmetry center at distance r along its gradient
+        shift_x = np.round(r * g_x_norm).astype(int)
+        shift_y = np.round(r * g_y_norm).astype(int)
+        
+        # Determine positive and negative voting locations
+        # Positive: gradient points TOWARD this location (bright center)
+        pos_x = np.clip(x_grid + shift_x, 0, cols-1)
+        pos_y = np.clip(y_grid + shift_y, 0, rows-1)
+        
+        # Negative: gradient points AWAY from this location (dark center)
+        neg_x = np.clip(x_grid - shift_x, 0, cols-1)
+        neg_y = np.clip(y_grid - shift_y, 0, rows-1)
+        
+        # Accumulate votes using fast vectorized operations
+        # np.add.at handles multiple votes to the same location correctly
+        np.add.at(O_n, (pos_y, pos_x), 1)       # +1 vote for orientation
+        np.add.at(O_n, (neg_y, neg_x), -1)      # -1 vote (opposite direction)
+        np.add.at(M_n, (pos_y, pos_x), mag)     # Weight by gradient magnitude
+        np.add.at(M_n, (neg_y, neg_x), -mag)
+        
+        # Step 3: Compute symmetry measure for this radius
+        # Clip orientation to prevent extreme values from causing instability
+        O_n = np.clip(O_n, -100, 100)
+        
+        # Symmetry formula: S = |O_n|^alpha * M_n
+        # - |O_n|^alpha: Orientation consistency (high when gradients align radially)
+        # - M_n: Magnitude weighting (strong edges contribute more)
+        S_n = (np.abs(O_n) ** alpha) * M_n
+        
+        # Step 4: Smooth the symmetry map
+        # Gaussian blur merges nearby votes into coherent blobs
+        # Kernel size scales with radius for appropriate spatial integration
+        ksize = int(r) | 1  # Ensure odd kernel size (bitwise OR with 1)
+        S_n = cv2.GaussianBlur(S_n, (ksize, ksize), r * 0.5)
+        
+        # Accumulate symmetry across all radii
+        S_total += S_n
+
+    # Step 5: Final normalization
+    # Take absolute value to capture both bright and dark symmetric centers
+    S_abs = np.abs(S_total)
+    
+    # Normalize to 0-255 range for visualization
+    S_norm = cv2.normalize(S_abs, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    
+    return S_norm
+
+# =============================================================================
+# SECTION 3: TRADITIONAL EDGE DETECTORS
+# =============================================================================
+
+def get_other_detectors(gray_image):
+    """
+    Applies traditional edge detection algorithms for comparison.
+    
+    Implements five classic edge detection methods:
+    1. Canny: Multi-stage algorithm with hysteresis thresholding
+    2. Sobel: First-order derivative operator
+    3. Prewitt: Similar to Sobel with slightly different weights
+    4. Roberts: 2x2 cross-gradient operator (fastest, noisiest)
+    5. LoG: Laplacian of Gaussian (second-order derivative)
+    
+    Args:
+        gray_image: Input grayscale image (uint8)
+        
+    Returns:
+        Tuple of (canny, sobel, prewitt, roberts, log_img)
+        All outputs are in uint8 format (0-255) for visualization
+    """
+    # Preprocessing: blur to reduce noise
+    blurred = cv2.GaussianBlur(gray_image, (3, 3), 0)
+    
+    # 1. Canny Edge Detector
+    # Multi-stage algorithm: gradient → non-max suppression → hysteresis
+    # Params: (low_threshold=50, high_threshold=150)
+    canny = cv2.Canny(blurred, 50, 150)
+    
+    # 2. Sobel Edge Detector
+    # Computes gradient magnitude using 3x3 Sobel kernels
+    sx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=3)  # ∂I/∂x
+    sy = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=3)  # ∂I/∂y
+    sobel = np.sqrt(sx**2 + sy**2)                      # Magnitude
+    
+    # 3. Prewitt Edge Detector
+    # Similar to Sobel but with uniform weights
+    kernelx = np.array([[1, 1, 1], [0, 0, 0], [-1, -1, -1]])   # Horizontal edges
+    kernely = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]])   # Vertical edges
+    px = cv2.filter2D(blurred, cv2.CV_64F, kernelx)
+    py = cv2.filter2D(blurred, cv2.CV_64F, kernely)
+    prewitt = np.sqrt(px**2 + py**2)
+    
+    # 4. Roberts Cross Operator
+    # Simplest gradient operator (2x2 diagonal kernels)
+    # Fast but very noise-sensitive
+    roberts_x = np.array([[1, 0], [0, -1]])    # Diagonal gradient
+    roberts_y = np.array([[0, 1], [-1, 0]])    # Anti-diagonal gradient
+    rx = cv2.filter2D(blurred, cv2.CV_64F, roberts_x)
+    ry = cv2.filter2D(blurred, cv2.CV_64F, roberts_y)
+    roberts = np.sqrt(rx**2 + ry**2)
+    
+    # 5. Laplacian of Gaussian (LoG)
+    # Second-order derivative → detects zero-crossings
+    # Good for finding blobs and fine details
+    log_img = cv2.Laplacian(blurred, cv2.CV_64F)
+    log_img = np.abs(log_img)  # Take absolute value to see all edges
+    
+    return canny, sobel, prewitt, roberts, log_img
+
+# =============================================================================
+# MAIN COMPARISON FUNCTION
+# =============================================================================
+
+def compare_all_algorithms(image_path):
+    """
+    Runs all algorithms on a single image and displays comparative results.
+    
+    This function orchestrates the entire comparison pipeline:
+    1. Loads and preprocesses image
+    2. Runs D_arg (with detailed visualization)
+    3. Runs Radial Symmetry
+    4. Runs traditional edge detectors
+    5. Displays all results in a grid for visual comparison
+    
+    Args:
+        image_path: Full path to input image file
+    """
+    print(f"\nProcessing: {os.path.basename(image_path)}...")
+    
+    # Load image
+    orig = cv2.imread(image_path)
+    if orig is None:
+        print(f"ERROR: Could not load image: {image_path}")
+        return
+    
+    # Convert to RGB for display (OpenCV loads as BGR)
+    orig_rgb = cv2.cvtColor(orig, cv2.COLOR_BGR2RGB)
+    
+    # Convert to grayscale for processing
+    gray = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
+    
+    # -------------------------------------------------------------------------
+    # 1. D_arg (Convexity Detection) - Proposed Method
+    # -------------------------------------------------------------------------
+    print("- Running D_arg Pipeline...")
+    d_arg_res = run_d_arg_pipeline(gray, show_steps=True)
+    d_arg_norm = cv2.normalize(d_arg_res, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    
+    # -------------------------------------------------------------------------
+    # 2. Radial Symmetry Transform
+    # -------------------------------------------------------------------------
+    print("- Running Radial Symmetry...")
+    radial_res = run_fast_radial_symmetry(gray, radii=[10, 20, 30, 40], alpha=2)
+    
+    # Use robust normalization to handle hotspots without introducing noise
+    radial_norm = robust_normalize(radial_res)
+    
+    # -------------------------------------------------------------------------
+    # 3. Traditional Edge Detectors
+    # -------------------------------------------------------------------------
+    print("- Running Standard Detectors...")
+    canny, sobel, prewitt, roberts, log_res = get_other_detectors(gray)
+    
+    # Normalize continuous-valued detectors to 0-255 range
+    sobel = cv2.normalize(sobel, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    prewitt = cv2.normalize(prewitt, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    roberts = cv2.normalize(roberts, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    log_res = cv2.normalize(log_res, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+    # -------------------------------------------------------------------------
+    # Display Comparison Grid
+    # -------------------------------------------------------------------------
+    fig, axes = plt.subplots(2, 4, figsize=(20, 10))
+    fig.canvas.manager.set_window_title('Algorithm Comparison')
+    ax = axes.ravel()
+    
+    # Row 1: Original + Advanced Methods
+    ax[0].imshow(orig_rgb)
+    ax[0].set_title("Original Image", fontweight='bold')
+    
+    ax[1].imshow(d_arg_norm, cmap='gray')
+    ax[1].set_title("D_arg (Convexity)\n(Proposed Method)", fontweight='bold', color='blue')
+    
+    ax[2].imshow(radial_norm, cmap='gray')
+    ax[2].set_title("Radial Symmetry")
+    
+    # Empty slot
+    ax[3].axis('off')
+    
+    # Row 2: Traditional Edge Detectors
+    ax[4].imshow(canny, cmap='gray')
+    ax[4].set_title("Canny")
+    
+    ax[5].imshow(sobel, cmap='gray')
+    ax[5].set_title("Sobel")
+    
+    ax[6].imshow(prewitt, cmap='gray')
+    ax[6].set_title("Prewitt")
+    
+    ax[7].imshow(log_res, cmap='gray')
+    ax[7].set_title("LoG")
+
+    # Remove axes from all subplots for cleaner visualization
+    for a in ax:
+        a.axis('off')
+    
+    plt.tight_layout()
+    print("Displaying results...")
+    plt.show()
+
+# =============================================================================
+# MAIN ENTRY POINT
 # =============================================================================
 
 def main():
-    """Main execution function."""
-    print("\n" + "=" * 50)
-    print("CAMOUFLAGE BREAKING ALGORITHM")
-    print("=" * 50 + "\n")
+    """
+    Main execution function.
     
-    # Check if dataset path exists
-    if not os.path.exists(ROOT_DATA_PATH):
-        print(f"ERROR: Dataset path does not exist: {ROOT_DATA_PATH}")
-        print("Please update DATASET_PATH at the top of the script.\n")
-        return
-    
-    # Explore dataset
-    all_image_files = explore_dataset(ROOT_DATA_PATH)
-    
-    if not all_image_files:
-        print("ERROR: No images found in the dataset!")
-        return
-    
-    # Test images from Bear folder
+    Defines test images and runs comparison pipeline on each.
+    Add more images to the test_images list to process multiple files.
+    """
+    # List of test images to process
     test_images = [
-        os.path.join(ROOT_DATA_PATH, "Bear", "camourflage_00164.jpg"),
-        os.path.join(ROOT_DATA_PATH, "Bear", "camourflage_00072.jpg")
+        os.path.join(ROOT_DATA_PATH, "Bear", "images - 2020-07-02T154335.549.jpg"), 
+        # Uncomment to process additional images:
+        # os.path.join(ROOT_DATA_PATH, "Bear", "camourflage_00072.jpg")
     ]
     
-    # Verify test images exist
+    # Process each test image
     for img_path in test_images:
+        # Verify file exists before processing
         if not os.path.exists(img_path):
             print(f"ERROR: Test image not found: {img_path}")
-            return
-    
-    # Run comparison on both test images
-    for i, image_path in enumerate(test_images, 1):
-        print(f"\n{'=' * 50}")
-        print(f"PROCESSING TEST IMAGE {i}/2")
-        print(f"{'=' * 50}\n")
-        print(f"Selected image: {image_path}\n")
-        compare_all_algorithms(image_path)
-    
-    print("=" * 50)
-    print("ANALYSIS COMPLETE")
-    print("=" * 50)
+            return 
+        
+        # Run full comparison pipeline
+        compare_all_algorithms(img_path)
 
-
+# Standard Python idiom: only run if script is executed directly
 if __name__ == "__main__":
     main()

@@ -4,7 +4,7 @@
 
 ### 1. Clone the repo
 ```bash
-git clone https://github.com/Raul-Andrei-Cardos/CamouflageBreaking.git
+git clone https://github.com/cardosandreiraul/CamouflageBreaking
 cd CamouflageBreaking
 ```
 

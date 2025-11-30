@@ -29,7 +29,7 @@ This project implements and compares various edge detection algorithms specifica
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/Raul-Andrei-Cardos/CamouflageBreaking.git
+git clone https://github.com/cardosandreiraul/CamouflageBreaking
 cd CamouflageBreaking
 ```
 
