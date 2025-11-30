@@ -8,9 +8,6 @@ This suite compares various computer vision techniques for detecting camouflaged
 1. D_arg (Convexity-based detection) - Novel proposed method
 2. Fast Radial Symmetry Transform - Detects symmetric features
 3. Traditional edge detectors (Canny, Sobel, Prewitt, Roberts, LoG)
-
-Author: Image Processing Research
-Purpose: Evaluate effectiveness of different algorithms on camouflaged animals
 """
 
 import os
