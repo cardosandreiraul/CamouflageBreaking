@@ -214,10 +214,10 @@ def run_d_arg_pipeline(gray_image, show_steps=True):
     # Define rotation angles and their OpenCV rotation codes
     # Format: (angle, forward_rotation_code, inverse_rotation_code)
     rotations = [
-        (0,   None,                           None),                          # No rotation
+        (0,   None,                           None),                           # No rotation
         (90,  cv2.ROTATE_90_CLOCKWISE,        cv2.ROTATE_90_COUNTERCLOCKWISE), # 90° CW
-        (180, cv2.ROTATE_180,                 cv2.ROTATE_180),                # 180°
-        (270, cv2.ROTATE_90_COUNTERCLOCKWISE, cv2.ROTATE_90_CLOCKWISE)        # 270° CW (= 90° CCW)
+        (180, cv2.ROTATE_180,                 cv2.ROTATE_180),                 # 180°
+        (270, cv2.ROTATE_90_COUNTERCLOCKWISE, cv2.ROTATE_90_CLOCKWISE)         # 270° CW (= 90° CCW)
     ]
 
     # Variables to store gradient info from 0° rotation for visualization
