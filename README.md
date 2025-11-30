@@ -20,12 +20,10 @@ This project implements and compares various edge detection algorithms specifica
 
 ### Prerequisites
 
-- Python 3.12.10 (recommended)
+- Python 3.12.10+
 - Git
 
 ### Installation
-
-#### Option 1: Using pip (recommended)
 
 1. Clone the repository:
 ```bash
@@ -53,24 +51,6 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-#### Option 2: Using conda
-
-1. Clone the repository:
-```bash
-git clone https://github.com/cardosandreiraul/CamouflageBreaking
-cd CamouflageBreaking
-```
-
-2. Create conda environment:
-```bash
-conda env create -f environment.yml
-```
-
-3. Activate the environment:
-```bash
-conda activate camouflage-breaking
-```
-
 ### Dataset Setup
 
  **Important**: The dataset is **not included** in this repository due to size constraints.
@@ -90,21 +70,6 @@ conda activate camouflage-breaking
    DATASET_PATH = "D:\\CamouflageBreaking\\data\\Camo Animals\\"
    ```
 
-## Usage
-
-Run the main script:
-
-```bash
-python main.py
-```
-
-The script will:
-1. Explore the dataset and count available images
-2. Process test images from the Bear category
-3. Apply all edge detection algorithms
-4. Display step-by-step visualizations of the D_arg algorithm
-5. Show a comparison of all algorithms side-by-side
-
 ### Customizing the Analysis
 
 You can modify the test images in [`main.py`](main.py):
@@ -115,26 +80,3 @@ test_images = [
     os.path.join(ROOT_DATA_PATH, "Bear", "camourflage_00072.jpg")
 ]
 ```
-
-### Algorithm Parameters
-
-- **D_arg Detector**: Adjust `percentile` (default: 75) for threshold sensitivity
-- **Radial Symmetry**: Modify `radii` (default: [5, 10, 15]) for different object sizes
-- **Gaussian Blur**: Kernel sizes can be adjusted in each algorithm function
-
-## Output
-
-The program generates:
-- Detailed step-by-step visualizations of the D_arg algorithm
-- Gradient computation steps (X, Y gradients, angle θ)
-- Rotation results (0°, 90°, 180°, 270°)
-- Statistical analysis (min, max, mean, threshold values)
-- Side-by-side comparison of all 7 algorithms
-
-## Dependencies
-
-- **OpenCV (cv2)**: Image processing and computer vision
-- **NumPy**: Numerical computations
-- **Matplotlib**: Visualization and plotting
-
-See [`requirements.txt`](requirements.txt) for exact versions.
