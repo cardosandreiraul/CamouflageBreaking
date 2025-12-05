@@ -137,7 +137,10 @@ def visualize_darg_detailed(img, blurred, gx, gy, theta, rot_results, final_sum,
     plt.tight_layout()
     plt.subplots_adjust(top=0.92)
 
-def run_d_arg_pipeline(gray_image, show_steps=True):
+def run_d_arg_pipeline(gray_image, show_steps=True, 
+                       blur_ksize=101,
+                       gradient_ksize=3,
+                       y_arg_ksize=17):
     """
     Executes the D_arg (Convexity Detection) algorithm pipeline.
     
@@ -163,7 +166,7 @@ def run_d_arg_pipeline(gray_image, show_steps=True):
         d_arg_squared: Final D_arg result (float64), high values indicate convex features
     """
     # Preprocessing: Gaussian blur reduces noise and stabilizes gradient computation
-    blurred = cv2.GaussianBlur(gray_image, (101, 101), 0)
+    blurred = cv2.GaussianBlur(gray_image, (blur_ksize, blur_ksize), 0)
     
     def get_gradients_and_theta(img):
         """
@@ -178,8 +181,8 @@ def run_d_arg_pipeline(gray_image, show_steps=True):
             theta: Gradient orientation (arctan2(gy, gx))
         """
         # Sobel operator computes derivatives in x and y directions
-        gx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
-        gy = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
+        gx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=gradient_ksize)
+        gy = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=gradient_ksize)
         
         # Theta = angle of gradient vector
         theta = np.arctan2(gy, gx)
@@ -199,7 +202,7 @@ def run_d_arg_pipeline(gray_image, show_steps=True):
             Y_arg derivative (float64)
         """
         # Use larger kernel (17x17) to capture broader structural features
-        return cv2.Sobel(theta_map, cv2.CV_64F, 0, 1, ksize=17)
+        return cv2.Sobel(theta_map, cv2.CV_64F, 0, 1, ksize=y_arg_ksize)
 
     # Initialize accumulator for summing results from all rotations
     h, w = gray_image.shape
@@ -273,7 +276,7 @@ def run_d_arg_pipeline(gray_image, show_steps=True):
 # SECTION 2: RADIAL SYMMETRY (FAST RADIAL SYMMETRY TRANSFORM)
 # =============================================================================
 
-def run_fast_radial_symmetry(gray_image, radii=[10, 20, 30, 40], alpha=2.0):
+def run_fast_radial_symmetry(gray_image, radii=[10, 20, 30, 40], alpha=2.0, blur_ksize=3):
     """
     Implements the Fast Radial Symmetry Transform (Loy & Zelinsky, 2003).
     
@@ -305,7 +308,7 @@ def run_fast_radial_symmetry(gray_image, radii=[10, 20, 30, 40], alpha=2.0):
     """
     # Step 1: Compute image gradients
     # Blur first to reduce noise sensitivity
-    blurred = cv2.GaussianBlur(gray_image, (3, 3), 0)
+    blurred = cv2.GaussianBlur(gray_image, (blur_ksize, blur_ksize), 0)
     
     # Compute gradients using Sobel operator
     g_x = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=3)
@@ -384,7 +387,10 @@ def run_fast_radial_symmetry(gray_image, radii=[10, 20, 30, 40], alpha=2.0):
 # SECTION 3: TRADITIONAL EDGE DETECTORS
 # =============================================================================
 
-def get_other_detectors(gray_image):
+def get_other_detectors(gray_image,
+                        blur_ksize=3,
+                        canny_low=50,
+                        canny_high=150):
     """
     Applies traditional edge detection algorithms for comparison.
     
@@ -403,12 +409,12 @@ def get_other_detectors(gray_image):
         All outputs are in uint8 format (0-255) for visualization
     """
     # Preprocessing: blur to reduce noise
-    blurred = cv2.GaussianBlur(gray_image, (3, 3), 0)
+    blurred = cv2.GaussianBlur(gray_image, (blur_ksize, blur_ksize), 0)
     
     # 1. Canny Edge Detector
     # Multi-stage algorithm: gradient → non-max suppression → hysteresis
     # Params: (low_threshold=50, high_threshold=150)
-    canny = cv2.Canny(blurred, 50, 150)
+    canny = cv2.Canny(blurred, canny_low, canny_high)
     
     # 2. Sobel Edge Detector
     # Computes gradient magnitude using 3x3 Sobel kernels
@@ -445,7 +451,10 @@ def get_other_detectors(gray_image):
 # MAIN COMPARISON FUNCTION
 # =============================================================================
 
-def compare_all_algorithms(image_path):
+def compare_all_algorithms(image_path,
+                           d_arg_params=None,
+                           radial_params=None,
+                           edge_params=None):
     """
     Runs all algorithms on a single image and displays comparative results.
     
@@ -459,6 +468,11 @@ def compare_all_algorithms(image_path):
     Args:
         image_path: Full path to input image file
     """
+    # Set defaults if None
+    if d_arg_params is None: d_arg_params = {'blur_ksize': 101, 'y_arg_ksize': 17}
+    if radial_params is None: radial_params = {'radii': [10, 20, 30, 40], 'alpha': 2.0}
+    if edge_params is None: edge_params = {'blur_ksize': 3, 'canny_low': 50, 'canny_high': 150}
+    
     print(f"\nProcessing: {os.path.basename(image_path)}...")
     
     # Load image
@@ -477,14 +491,14 @@ def compare_all_algorithms(image_path):
     # 1. D_arg (Convexity Detection) - Proposed Method
     # -------------------------------------------------------------------------
     print("- Running D_arg Pipeline...")
-    d_arg_res = run_d_arg_pipeline(gray, show_steps=True)
+    d_arg_res = run_d_arg_pipeline(gray, show_steps=True, **d_arg_params)
     d_arg_norm = cv2.normalize(d_arg_res, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     
     # -------------------------------------------------------------------------
     # 2. Radial Symmetry Transform
     # -------------------------------------------------------------------------
     print("- Running Radial Symmetry...")
-    radial_res = run_fast_radial_symmetry(gray, radii=[10, 20, 30, 40], alpha=2)
+    radial_res = run_fast_radial_symmetry(gray, **radial_params)
     
     # Use robust normalization to handle hotspots without introducing noise
     radial_norm = robust_normalize(radial_res)
@@ -493,7 +507,7 @@ def compare_all_algorithms(image_path):
     # 3. Traditional Edge Detectors
     # -------------------------------------------------------------------------
     print("- Running Standard Detectors...")
-    canny, sobel, prewitt, roberts, log_res = get_other_detectors(gray)
+    canny, sobel, prewitt, roberts, log_res = get_other_detectors(gray, **edge_params)
     
     # Normalize continuous-valued detectors to 0-255 range
     sobel = cv2.normalize(sobel, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
