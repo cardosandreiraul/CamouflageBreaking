@@ -19,7 +19,7 @@ This project implements and compares various edge detection algorithms specifica
 
 ### Prerequisites
 
-- Python 3.12.10+
+- Python 3.7+
 - Git
 
 ### Installation
