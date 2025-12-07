@@ -11,7 +11,6 @@ This project implements and compares various edge detection algorithms specifica
 - **D_arg Convexity Detector** - Custom convexity-based detection using DoG
 - **Canny Edge Detector** - Classic edge detection algorithm
 - **Sobel Edge Detector** - Gradient-based edge detection
-- **Prewitt Edge Detector** - Similar to Sobel with different kernel
 - **Roberts Cross Edge Detector** - Simple 2x2 gradient operator
 - **Laplacian of Gaussian (LoG)** - Second derivative-based detection
 - **Radial Symmetry Transform** - Symmetry-based feature detection
@@ -55,7 +54,7 @@ pip install -r requirements.txt
 
  **Important**: The dataset is **not included** in this repository due to size constraints.
 
-1. Download the "Camo Animals" dataset (or use your own camouflage images)
+1. Download the "[Camo Animals](https://www.kaggle.com/datasets/farisrustom/camoanimals)" dataset (or use your own camouflage images)
 2. Place the dataset in the `data/` directory:
    ```
    data/
@@ -64,19 +63,3 @@ pip install -r requirements.txt
        ├── Bird 1/
        └── ... (other categories)
    ```
-
-3. Update the dataset path in [`main.py`](main.py) if needed:
-   ```python
-   DATASET_PATH = "D:\\CamouflageBreaking\\data\\Camo Animals\\"
-   ```
-
-### Customizing the Analysis
-
-You can modify the test images in [`main.py`](main.py):
-
-```python
-test_images = [
-    os.path.join(ROOT_DATA_PATH, "Bear", "camourflage_00164.jpg"),
-    os.path.join(ROOT_DATA_PATH, "Bear", "camourflage_00072.jpg")
-]
-```
