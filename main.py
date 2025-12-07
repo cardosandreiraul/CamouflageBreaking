@@ -11,6 +11,7 @@ objects:
 """
 
 import os
+from typing import Tuple, Union
 
 import cv2
 import matplotlib.pyplot as plt
@@ -20,16 +21,95 @@ import numpy as np
 # CONFIGURATION
 # =============================================================================
 
-# Root directory containing test images of camouflaged animals
-ROOT_DATA_PATH = r"C:\Users\Raul\Documents\uni\DIP\CamouflageBreaking\data\Camo Animals"
 
+# Root directory containing test images of camouflaged animals
+ROOT_DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "Camo Animals")
+
+# Algorithm Constants
+PERCENTILE_MIN = 0
+PERCENTILE_MAX = 99.5
+SYMMETRY_CLIP_LIMIT = 100
+RADIAL_ALPHA_DEFAULT = 2.0
+DEFAULT_RADII = [10, 20, 30, 40]
+
+# Preconfigured settings for specific images
+settings = {
+    "Bear": {
+        "path": os.path.join(
+            ROOT_DATA_PATH, "Bear", "images - 2020-07-02T154335.549.jpg"
+        ),
+        "gaussianblur": 101,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 17,
+    },
+    "Canine1": {
+        "path": os.path.join(ROOT_DATA_PATH, "Canine 1", "camourflage_00265.jpg"),
+        "gaussianblur": 101,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 17,
+    },
+    "Feline": {
+        "path": os.path.join(ROOT_DATA_PATH, "Feline 2", "images (61).jpg"),
+        "gaussianblur": 105,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 13,
+    },
+    "FlatFish": {
+        "path": os.path.join(ROOT_DATA_PATH, "Flat Fish 1", "download (10).jpg"),
+        "gaussianblur": 101,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 13,
+    },
+    "Bird": {
+        "path": os.path.join(ROOT_DATA_PATH, "Bird 1", "000000175774.jpg"),
+        "gaussianblur": 101,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 11,
+    },
+    "Canine2": {
+        "path": os.path.join(ROOT_DATA_PATH, "Canine 2", "download (25).jpg"),
+        "gaussianblur": 101,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 13,
+    },
+    "Canine3": {
+        "path": os.path.join(ROOT_DATA_PATH, "Canine 1", "camourflage_00333.jpg"),
+        "gaussianblur": 103,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 17,
+    },
+    "Bear2": {
+        "path": os.path.join(ROOT_DATA_PATH, "Bear", "download (5).jpg"),
+        "gaussianblur": 101,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 11,
+    },
+    "Canine4": {
+        "path": os.path.join(ROOT_DATA_PATH, "Canine 2", "images (28).jpg"),
+        "gaussianblur": 101,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 13,
+    },
+    "Bird2": {
+        "path": os.path.join(ROOT_DATA_PATH, "Bird 2", "camourflage_00822.jpg"),
+        "gaussianblur": 101,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 11,
+    },
+    "Canine5": {
+        "path": os.path.join(ROOT_DATA_PATH, "Canine 2", "images (90).jpg"),
+        "gaussianblur": 101,
+        "gradient_ksize": 3,
+        "y_derivative_ksize": 13,
+    },
+}
 
 # =============================================================================
 # UTILITIES
 # =============================================================================
 
 
-def robust_normalize(img):
+def robust_normalize(img: np.ndarray) -> np.ndarray:
     """Normalize an image while ignoring extreme outliers (hotspots).
 
     This function prevents bright hotspots from compressing the dynamic range
@@ -161,8 +241,13 @@ def visualize_darg_detailed(
 
 
 def run_d_arg_pipeline(
-    gray_image, show_steps=True, blur_ksize=101, gradient_ksize=3, y_arg_ksize=17
-):
+    gray_image: np.ndarray,
+    blur_ksize: int = 101,
+    gradient_ksize: int = 3,
+    y_arg_ksize: int = 17,
+    visualize_matplotlib: bool = False,
+    return_intermediates: bool = False,
+) -> Union[np.ndarray, Tuple]:
     """Execute the D_arg (Convexity Detection) algorithm pipeline.
 
     The D_arg operator detects convex/concave features by measuring how the
@@ -308,8 +393,20 @@ def run_d_arg_pipeline(
     d_arg_squared = d_arg_accumulator**2
 
     # Visualize pipeline if requested
-    if show_steps:
+    if visualize_matplotlib:
         visualize_darg_detailed(
+            gray_image,
+            blurred,
+            g_gx,
+            g_gy,
+            g_theta,
+            rotation_snapshots,
+            d_arg_accumulator,
+            d_arg_squared,
+        )
+
+    if return_intermediates:
+        return (
             gray_image,
             blurred,
             g_gx,
@@ -535,7 +632,11 @@ def get_other_detectors(gray_image, blur_ksize=3, canny_low=50, canny_high=150):
 
 
 def compare_all_algorithms(
-    image_path, d_arg_params=None, radial_params=None, edge_params=None
+    image_path,
+    d_arg_params=None,
+    radial_params=None,
+    edge_params=None,
+    return_images=False,
 ):
     """Run all algorithms on a single image and display comparative results.
 
@@ -566,7 +667,11 @@ def compare_all_algorithms(
     if edge_params is None:
         edge_params = {"blur_ksize": 3, "canny_low": 50, "canny_high": 150}
 
-    print(f"\nProcessing: {os.path.basename(image_path)}...")
+    if not os.path.exists(image_path):
+        print(f"ERROR: Image not found: {os.path.basename(image_path)}")
+        return None
+    else:
+        print(f"Processing: {os.path.basename(image_path)}...")
 
     # Load image
     orig = cv2.imread(image_path)
@@ -584,7 +689,7 @@ def compare_all_algorithms(
     # 1. D_arg (Convexity Detection) - Proposed Method
     # -------------------------------------------------------------------------
     print("- Running D_arg Pipeline...")
-    d_arg_res = run_d_arg_pipeline(gray, show_steps=True, **d_arg_params)
+    d_arg_res = run_d_arg_pipeline(gray, visualize_matplotlib=True, **d_arg_params)
     d_arg_norm = cv2.normalize(
         d_arg_res, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
     )
@@ -609,6 +714,9 @@ def compare_all_algorithms(
     prewitt = cv2.normalize(prewitt, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     roberts = cv2.normalize(roberts, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     log_res = cv2.normalize(log_res, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+    if return_images:
+        return d_arg_norm, radial_norm, canny, sobel, prewitt, roberts, log_res
 
     # -------------------------------------------------------------------------
     # Display Comparison Grid
