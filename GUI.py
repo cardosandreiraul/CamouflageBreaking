@@ -810,31 +810,24 @@ class Window:
         return row, col
 
     def display_only_result(self):
-        """Display only the final D_arg result in large format.
+        """Display the final D_arg results.
 
-        Runs the D_arg pipeline on the selected image and displays only the
-        final squared result (d_arg²) in a large 500x500 pixel format,
-        without showing intermediate processing steps.
+        Runs the D_arg pipeline on the selected image and displays:
+        1. Original image with white cross markers at D_arg peaks
+        2. Final D_arg² result in large format
 
-        Notes
-        -----
-        Useful for quick evaluation of algorithm performance on a single image.
-        Clears previous results before displaying new result.
-        Returns silently if no image is selected.
+        The markers indicate the top detected camouflaged regions.
         """
-        # Get image selected :
+        # Get image selected
         img_path = self.get_selected_image_path()
         if not img_path:
             return
 
         img = cv2.imread(img_path)
-
-        # Convert to RGB for display (OpenCV loads as BGR) :
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        # Convert to grayscale for processing
         gray = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)
 
+        # Run D_arg pipeline
         intermediates = main.run_d_arg_pipeline(
             gray,
             blur_ksize=self.blur_ksize.get(),
@@ -842,13 +835,72 @@ class Window:
             y_arg_ksize=self.y_arg_ksize.get(),
             return_intermediates=True,
         )
-        d_arg_squared = intermediates[-1]  # Extract result
+        d_arg_squared = intermediates[-1]
 
+        # Clear previous results
         for w in self.results_frame.winfo_children():
             w.destroy()
 
-        # Display larger
-        self.put("Final D_arg Result", d_arg_squared, 0, 0, 1, 500, 500)
+        # Find peaks in d_arg_squared result
+        # Normalize to 0-255 for threshold calculation
+        d_arg_norm = cv2.normalize(
+            d_arg_squared, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+        )
+
+        # Find local maxima - use threshold at 70% of max value
+        threshold = np.max(d_arg_norm) * 0.7
+        peak_mask = d_arg_norm > threshold
+
+        # Find connected components (peak regions)
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+            peak_mask.astype(np.uint8), connectivity=8
+        )
+
+        # Create overlay on original image
+        img_with_markers = img_rgb.copy()
+
+        # Draw cross markers at peak centroids (skip label 0 which is background)
+        marker_size = max(10, min(img_rgb.shape[0], img_rgb.shape[1]) // 50)
+        marker_thickness = max(2, marker_size // 5)
+        circle_radius = int(marker_size * 1.5)
+
+        for i in range(1, num_labels):
+            # Get centroid coordinates
+            cx, cy = int(centroids[i][0]), int(centroids[i][1])
+
+            # Draw black filled circle background
+            cv2.circle(
+                img_with_markers,
+                (cx, cy),
+                circle_radius,
+                (0, 0, 0),
+                -1,  # -1 means filled circle
+            )
+
+            # Draw white cross marker on top
+            # Horizontal line
+            cv2.line(
+                img_with_markers,
+                (cx - marker_size, cy),
+                (cx + marker_size, cy),
+                (255, 255, 255),
+                marker_thickness,
+            )
+            # Vertical line
+            cv2.line(
+                img_with_markers,
+                (cx, cy - marker_size),
+                (cx, cy + marker_size),
+                (255, 255, 255),
+                marker_thickness,
+            )
+
+        # Display in grid: original with markers (left) and d_arg result (right)
+        row, col = 0, 0
+        row, col = self.put(
+            "Original with Detected Peaks", img_with_markers, row, col, 2, 500, 500
+        )
+        self.put("D_arg² Result", d_arg_squared, row, col, 2, 500, 500)
 
     def display_preconfigured_examples(self):
         """Display results for all preconfigured test images.
